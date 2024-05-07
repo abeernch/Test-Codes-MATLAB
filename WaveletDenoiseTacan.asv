@@ -1,0 +1,30 @@
+% Denoise signal using the Discrete Wavelet Transform (DWT)
+level = floor(log2(length(Signal_Tacan)));
+[Signal_Tacan1,coeffs,sc_coeffs] = wdenoise(Signal_Tacan,level, ...
+    Wavelet='sym18', ...
+    DenoisingMethod='BlockJS', ...
+    ThresholdRule='James-Stein', ...
+    NoiseEstimate='LevelIndependent');
+figure;plot(Signal_Tacan1)
+hold on
+plot(Signal_Tacan)
+%% Multiresolution Analysis
+% define number of levels to use
+numLevels = 10;
+% perform maximal overlap discrete wavelet transform (MODWT)
+wt = modwt(Signal_Tacan, 'sym11', numLevels);
+% Get the separated signal components in time 
+mra = modwtmra(wt,'sym11');
+
+%% Reconstruct the signal using only the components of interest
+% Naturally, the components of interest in MRA are those not representing
+% noise, i.e. the last components of the MRA
+% The recontructed signal is acquired by excluding the high frequency
+% isolated components and summing the low frequency components.
+
+reconstr_sig = sum(mra(end-2:end,:)); % The last thres
+
+%% Plot and compare
+figure,plot(Signal_Tacan)
+hold on
+plot(reconstr_sig,'LineWidth',3)
