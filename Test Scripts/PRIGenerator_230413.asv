@@ -1,0 +1,105 @@
+%% Controlled Random PRI Generator for PDW Simulator
+clear;clc;close all
+
+% User configurable
+nEmitters = 2;
+nPDWs = 10e3;
+percErr = 0.1;
+% From the total no of PDWs to be generated, assign each emitter random no
+% of PDWs that are modeled as a Gaussian Distributed variable
+% Generate no btw 0-1
+share = abs(round(randn(1,nEmitters),5));
+% Divide each by sum of the values generated and multiply by the total no
+% of PDWs to be generated
+ind_share = round((share./sum(share))*nPDWs);
+% If sum falls below the nPDWs, add the shortage to the share of the last
+% emitter
+while sum((ind_share)) < nPDWs
+    ind_share(end) = ind_share(end) + nPDWs - sum(ind_share);
+end
+
+% Available PRI Agilities
+typePool = {'Fixed', 'Staggered', 'DnS', 'Jitter'};
+% Access random agility for the no. of emitters to simulate
+agility = randi(length(typePool),1,nEmitters);
+% Bound for PRIs
+pri_lim = [100e-6 5e-3];
+
+% Initialize
+tx = cell(1,nEmitters);
+k = 1;
+
+%% Switch case for agility type
+for i = 1:nEmitters
+    switch agility(i)
+        % Fixed
+        case 1
+            % generate a controlled random fixed PRI equal to the equal to the share of the emitters in no of PDWs
+            tx{i}.levels_pri = 0;
+            tx{i}.type_pri = 'Fixed';
+            pri = round(rand(1)*(pri_lim(2) - pri_lim(1)) + pri_lim(1),6);
+            tx{i}.pri = pri;
+            pri = repelem(pri,ind_share(i));
+            tx{i}.toa = pri + rand(1,ind_share(i))*(0.01*percErr*pri(1)*2) - (0.01*percErr*pri(1));
+
+            % Staggered
+        case 2
+            % PRI levels [2 10]
+            tx{i}.levels_pri = round(rand()*8+2);
+            tx{i}.type_pri = 'Staggered';
+            subrange = [rand()*(pri_lim(2) - pri_lim(1)) + pri_lim(1) rand()*(pri_lim(2) - pri_lim(1)) + pri_lim(1)];
+            pri = round(rand(1,tx{i}.levels_pri)*(max(subrange) - min(subrange)) + min(subrange),6);
+            tx{i}.pri = pri;
+            pri = repmat(pri,1,ceil(ind_share(i)/length(pri)));
+            pri = pri(1:ind_share(i));
+            tx{i}.toa = pri;
+
+            % DNS
+        case 3
+            % PRI levels [2 10]
+            tx{i}.levels_pri = round(rand()*8+2);   
+            tx{i}.type_pri = 'DnS';
+            subrange = [rand()*(pri_lim(2) - pri_lim(1)) + pri_lim(1) rand()*(pri_lim(2) - pri_lim(1)) + pri_lim(1)];
+            pri = round(rand(1,tx{i}.levels_pri)*(max(subrange) - min(subrange)) + min(subrange),6);
+            tx{i}.pri = pri;
+            pri = repelem(pri,1,tx{i}.levels_pri);
+            pri = repmat(pri,1,ceil(ind_share(i)/length(pri)));
+            pri = pri(1:ind_share(i));
+            tx{i}.toa = pri;
+
+            % Jitter
+        case 4
+            tx{i}.levels_pri(i) = 0;
+            tx{i}.type_pri = 'Jitter';
+            subrange = [rand()*(pri_lim(2) - pri_lim(1)) + pri_lim(1) rand()*(pri_lim(2) - pri_lim(1)) + pri_lim(1)];
+            pri = round(rand(1,ind_share(i))*(max(subrange) - min(subrange)) + min(subrange),6);
+            tx{i}.pri = pri;
+            pri = pri(1:ind_share(i));
+            tx{i}.toa = pri;
+    end
+
+    %% Accumlate the PRIs and convert them into TOAs
+    cumPRI(k : k + ind_share(i) -1) = tx{i}.toa;
+    k = k + ind_share(i);
+end
+%% Create TOAs
+% by taking cumulutive sum of the elements of PRI for each emitter and
+% Interleave randomly and save the generator to reproduce sequence for
+% other parameters
+
+v_toa = cumsum(cumPRI);
+
+% Generate a controlled random number sequence
+s = rng;
+% Shuffle (interleave the TOAs) using random permutation of the values from
+% all emitters
+t = (randperm(length(cumPRI)));
+% Apply logical masking
+cumTOA = cumPRI(t);
+% Final TOA Array
+reportedTOA = cumsum(cumTOA);
+
+
+figure;plot((cumPRI),'.')
+figure;plot((reportedTOA),'.')
+figure;plot((cumTOA),'.')
